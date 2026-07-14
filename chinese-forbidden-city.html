@@ -904,14 +904,50 @@
       speedValue.textContent = speechRate.toFixed(2) + 'x';
     });
 
+    // Voice loading: mobile browsers need voiceschanged event
+    var chineseVoice = null;
+    function loadVoices() {
+      try {
+        var voices = window.speechSynthesis.getVoices();
+        if (!voices || !voices.length) return;
+        // Pick a Chinese voice: prefer ones with 'zh', 'cmn', 'yue', 'Chinese' in name/lang
+        for (var v = 0; v < voices.length; v++) {
+          var vl = (voices[v].lang || '').toLowerCase();
+          var vn = (voices[v].name || '').toLowerCase();
+          if (vl.indexOf('zh') === 0 || vl.indexOf('cmn') === 0 || vl.indexOf('yue') === 0 || vn.indexOf('chinese') !== -1) {
+            chineseVoice = voices[v];
+            break;
+          }
+        }
+        // Fallback: any voice that claims to support zh-CN
+        if (!chineseVoice) {
+          for (var v2 = 0; v2 < voices.length; v2++) {
+            if ((voices[v2].lang || '').toLowerCase().indexOf('zh') !== -1) {
+              chineseVoice = voices[v2];
+              break;
+            }
+          }
+        }
+      } catch(e) {}
+    }
+    try {
+      loadVoices();
+      if (window.speechSynthesis && window.speechSynthesis.onvoiceschanged !== undefined) {
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+      }
+    } catch(e) {}
+
     function speak(text) {
       try {
         if (!window.speechSynthesis) return;
         window.speechSynthesis.cancel();
         var utter = new SpeechSynthesisUtterance(text);
+        if (chineseVoice) utter.voice = chineseVoice;
         utter.lang = 'zh-CN';
         utter.rate = speechRate;
         utter.pitch = 1;
+        // Mobile Safari/Chrome fix: resume if paused
+        try { if (window.speechSynthesis.paused) window.speechSynthesis.resume(); } catch(e) {}
         window.speechSynthesis.speak(utter);
       } catch(e) {
         // silently ignore if speech synthesis is not available
@@ -934,9 +970,11 @@
             try {
               window.speechSynthesis.cancel();
               var u = new SpeechSynthesisUtterance(lines[i]);
+              if (chineseVoice) u.voice = chineseVoice;
               u.lang = 'zh-CN'; u.rate = speechRate; u.pitch = 1;
               u.onend = function() { i++; if (i < lines.length) setTimeout(next, 600); };
               u.onerror = function() { i++; if (i < lines.length) setTimeout(next, 600); };
+              try { if (window.speechSynthesis.paused) window.speechSynthesis.resume(); } catch(e) {}
               window.speechSynthesis.speak(u);
             } catch(e) {}
           }
